@@ -146,14 +146,13 @@ ingress:
   #   tls: false + entryPoint: web        -> first-day deploy (Phase 4), no cert needed.
   #   tls: true  + entryPoint: websecure  -> HTTPS via cert-manager (Phase 7).
   tls: false
-  # Hostnames this IngressRoute will match. The template renders these as
-  # `Host(`h1`) || Host(`h2`) || ...` (Traefik 3's correct multi-host form;
-  # the comma form Host(`a`,`b`) is rejected as "unexpected number of
-  # parameters"). Put the production hostname first; the raw LB IP stays
-  # as a fallback so curl-by-IP keeps working for debugging.
-  hosts:
-    - vijaygiduthuri.in
-    - 35.224.38.103
+  # Production hostname (the DNS name your users / domain point at).
+  host: vijaygiduthuri.in
+  # Traefik LoadBalancer IP — kept as a second host so curl-by-IP still
+  # works for debugging even after DNS is in place. Get it with:
+  #   kubectl -n traefik get svc traefik \
+  #     -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+  lbIP: 35.224.38.103
   entryPoint: web
   tlsSecretName: cloudkitchen-tls
   clusterIssuer: letsencrypt-prod
