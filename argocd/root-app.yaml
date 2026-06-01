@@ -20,7 +20,7 @@ spec:
 
   source:
     # NOTE: Replace with your real Git repository URL.
-    repoURL: https://github.com/cloudkitchen/cloudkitchen # <-- REPLACE
+    repoURL: https://github.com/vijaygiduthuri/cloudkitchen-app.git # <-- REPLACE
     targetRevision: main
     # Directory source: ArgoCD renders every manifest under argocd/apps as a
     # child Application (the App-of-Apps "fan out").
