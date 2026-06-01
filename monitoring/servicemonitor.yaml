@@ -1,23 +1,31 @@
-# servicemonitor.yaml
-# -----------------------------------------------------------------------------
-# ServiceMonitor for all CloudKitchen Go microservices.
+# =============================================================================
+# ServiceMonitor — tells Prometheus to scrape every cloudkitchen backend.
 #
-# Each service is fronted by a ClusterIP Service that:
-#   - lives in the `cloudkitchen` namespace
-#   - carries the label app.kubernetes.io/part-of: cloudkitchen
-#   - exposes a named port `http` -> 8080
+# All 8 Go services (auth/user/restaurant/menu/order/payment/delivery/notification)
+# share the label  app.kubernetes.io/part-of: cloudkitchen  on their Services,
+# and each exposes /metrics on the named port `http` (port 8080).
 #
-# Prometheus (kube-prometheus-stack) discovers this ServiceMonitor because the
-# stack is configured with serviceMonitorSelectorNilUsesHelmValues: false.
-# -----------------------------------------------------------------------------
+# The kube-prometheus-stack Prometheus is configured with
+#   serviceMonitorSelectorNilUsesHelmValues: false
+# so it discovers ServiceMonitors in ANY namespace — this file is enough.
+#
+# Apply:
+#   kubectl apply -f monitoring/servicemonitor.yaml
+# =============================================================================
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: cloudkitchen-services
-  namespace: monitoring
+  namespace: cloudkitchen
   labels:
-    release: kube-prom-stack
-    app.kubernetes.io/part-of: cloudkitchen
+    # Match the kube-prom-stack chart's default serviceMonitorSelector if
+    # anyone tightens it later. Wide-open by default per our chart values.
+    release: kube-prometheus
+  annotations:
+    # Keep this resource alive even though it's not tracked by an ArgoCD App.
+    # (We chose to apply it manually rather than via the cloudkitchen helm
+    # chart — see docs/gcp/06-monitoring-and-logging.md Step 6.)
+    argocd.argoproj.io/sync-options: Prune=false
 spec:
   namespaceSelector:
     matchNames:
@@ -26,14 +34,7 @@ spec:
     matchLabels:
       app.kubernetes.io/part-of: cloudkitchen
   endpoints:
-    - port: http            # named port on the Service -> targetPort 8080
+    - port: http             # the Service port NAME, not the number
       path: /metrics
       interval: 30s
       scrapeTimeout: 10s
-      scheme: http
-      relabelings:
-        # Promote the service name onto a stable `service` label.
-        - source_labels: [__meta_kubernetes_service_label_app]
-          targetLabel: service
-        - source_labels: [__meta_kubernetes_pod_name]
-          targetLabel: pod

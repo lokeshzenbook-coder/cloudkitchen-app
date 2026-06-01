@@ -1,0 +1,28 @@
+# =============================================================================
+# Traefik IngressRoute exposing Grafana at  http://<host>/grafana/
+# Backend: monitoring-grafana:80 (Service installed by kube-prometheus-stack).
+#
+# Replace the two host values to match your deployment:
+#   - Host(`vijaygiduthuri.in`)    -> your DNS name
+#   - Host(`35.224.38.103`)         -> your Traefik LB IP
+#                                       (kubectl -n traefik get svc traefik)
+#
+# Apply:
+#   kubectl apply -f monitoring/ingressroutes/grafana.yaml
+# =============================================================================
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: grafana
+  namespace: monitoring
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: (Host(`vijaygiduthuri.in`) || Host(`35.224.38.103`)) && PathPrefix(`/grafana`)
+      kind: Rule
+      services:
+        - name: monitoring-grafana
+          port: 80

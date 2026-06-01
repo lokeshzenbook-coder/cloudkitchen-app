@@ -289,7 +289,7 @@ applied directly with `kubectl apply`. No Helm templates, no chart wiring.
 > below with **YOUR** domain and **YOUR** Traefik LB IP. Both appear in
 > every match line; just find-and-replace before saving each file.
 
-### 5a — `grafana-ingressroute.yaml`
+### 5a — `monitoring/ingressroutes/grafana.yaml`
 
 ```yaml
 apiVersion: traefik.io/v1alpha1
@@ -308,7 +308,7 @@ spec:
           port: 80
 ```
 
-### 5b — `prometheus-ingressroute.yaml`
+### 5b — `monitoring/ingressroutes/prometheus.yaml`
 
 ```yaml
 apiVersion: traefik.io/v1alpha1
@@ -327,7 +327,7 @@ spec:
           port: 9090
 ```
 
-### 5c — `alertmanager-ingressroute.yaml`
+### 5c — `monitoring/ingressroutes/alertmanager.yaml`
 
 ```yaml
 apiVersion: traefik.io/v1alpha1
@@ -351,9 +351,9 @@ spec:
 Save the three YAMLs above to local files and apply them in one shot:
 
 ```bash
-kubectl apply -f grafana-ingressroute.yaml
-kubectl apply -f prometheus-ingressroute.yaml
-kubectl apply -f alertmanager-ingressroute.yaml
+kubectl apply -f monitoring/ingressroutes/grafana.yaml
+kubectl apply -f monitoring/ingressroutes/prometheus.yaml
+kubectl apply -f monitoring/ingressroutes/alertmanager.yaml
 
 # Confirm:
 kubectl -n monitoring get ingressroute
@@ -405,7 +405,7 @@ cloudkitchen` (set by the cloudkitchen helm chart's `<svc>-service.yaml`
 templates) and expose `/metrics` on the `http` port. **One ServiceMonitor
 selects all of them at once.**
 
-### Save `cloudkitchen-servicemonitor.yaml`
+### Save `monitoring/servicemonitor.yaml`
 
 Copy this YAML to a local file as-is. No edits needed — it picks up every
 cloudkitchen service automatically by label.
@@ -446,7 +446,7 @@ spec:
 ### Apply it
 
 ```bash
-kubectl apply -f cloudkitchen-servicemonitor.yaml
+kubectl apply -f monitoring/servicemonitor.yaml
 
 # Confirm:
 kubectl -n cloudkitchen get servicemonitor
@@ -524,7 +524,7 @@ container that watches the cluster for this exact label). So the recipe is:
 ### 8a — Generator script
 
 The repo ships a small Python generator at
-[observability/grafana-dashboards/generate.py](../../observability/grafana-dashboards/generate.py).
+[monitoring/dashboards/generate.py](../../monitoring/dashboards/generate.py).
 It takes one dashboard template (10 panels × 5 rows: stats, traffic, latency,
 resources, logs) and emits 8 ConfigMaps — one per microservice — into a
 single multi-doc YAML.
