@@ -154,7 +154,7 @@ accordingly. Stripping the prefix here would actually *break* the UI because
 the backend would receive `/` and re-emit links pointing at `/argocd/...`
 that don't match what reached Traefik.
 
-**Verify**:
+**Verify the IngressRoute is reachable**:
 ```bash
 LB_IP=$(kubectl -n traefik get svc traefik -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 curl -sI -o /dev/null -w "/argocd  -> HTTP %{http_code}\n"  "http://${LB_IP}/argocd"
@@ -163,13 +163,81 @@ curl -sI -o /dev/null -w "/argocd/ -> HTTP %{http_code}\n"  "http://${LB_IP}/arg
 #         /argocd/ -> 200 (login page)
 ```
 
-**Get the initial admin password**:
+### 3a — Open the ArgoCD UI in a browser
+
+Build the full URL from the LB IP and open it:
+
+```bash
+# 1. Grab the LB IP (the same IP fronting your app)
+LB_IP=$(kubectl -n traefik get svc traefik -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+
+# 2. Print the ArgoCD URL  (trailing slash matters — without it you get a 307 redirect)
+echo "ArgoCD UI:  http://${LB_IP}/argocd/"
+```
+
+In a browser, paste that URL exactly. You should see the **ArgoCD login
+page** (dark theme, "Argo CD" logo, username + password fields).
+
+### 3b — Get the initial admin password
+
+ArgoCD provisions a random one-shot admin password as a Kubernetes Secret
+called `argocd-initial-admin-secret` in the `argocd` namespace. Print it:
+
 ```bash
 kubectl -n argocd get secret argocd-initial-admin-secret \
   -o jsonpath='{.data.password}' | base64 -d ; echo
+# Sample output: B3YMfE1WHNOpFInP
 ```
-Login user is `admin`. Change the password from the UI (User Info → Update
-Password) and then `kubectl -n argocd delete secret argocd-initial-admin-secret`.
+
+> 💡 **Want one command that gives you everything?** This prints the URL +
+> credentials together:
+> ```bash
+> LB_IP=$(kubectl -n traefik get svc traefik -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+> echo "URL:      http://${LB_IP}/argocd/"
+> echo "Username: admin"
+> echo -n "Password: " ; kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d ; echo
+> ```
+
+### 3c — Log in
+
+| Field | Value |
+| --- | --- |
+| **Username** | `admin` |
+| **Password** | the value from 3b |
+
+After login you land on the **Applications** dashboard (empty for now —
+Steps 4 + 5 below add the `cloudkitchen` Application that will populate it).
+
+### 3d — (optional) Alternative access: port-forward
+
+If your LB isn't reachable yet (DNS not set up, behind a corporate proxy, etc.)
+you can also reach the UI directly from your laptop:
+
+```bash
+kubectl -n argocd port-forward svc/argocd-server 8080:80
+```
+
+Then open **http://localhost:8080/argocd/** (same trailing-slash rule). Stop
+with `Ctrl+C`. This is fine for one-off debugging but you'll usually want
+the IngressRoute for daily use — port-forward dies when your terminal
+closes.
+
+### 3e — Lock down the initial admin password (do this once)
+
+The bootstrap secret stays in the cluster forever unless you delete it.
+**After your first successful login**, change the password from the UI and
+remove the secret:
+
+```bash
+# 1. In the ArgoCD UI: top-right user menu (👤 admin) → "Update Password"
+#    Enter the current (bootstrap) password + a new strong one. Save.
+
+# 2. Once you've verified the new password works, delete the bootstrap secret:
+kubectl -n argocd delete secret argocd-initial-admin-secret
+```
+
+Not urgent for day-1 — but don't forget to do it before any DNS/HTTPS phase
+makes the UI public-reachable.
 
 ---
 
