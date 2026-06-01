@@ -9,114 +9,103 @@
 
 # Namespace every resource is created in.
 namespace: cloudkitchen
-
 # Container registry that holds the service images (GCP Artifact Registry for GKE).
 imageRegistry: us-central1-docker.pkg.dev/project-d31a3358-346c-40e8-bda/cloudkitchen-registry
-
 # -----------------------------------------------------------------------------
 # Backend microservices (all listen on :8080, expose /healthz and /readyz)
 # -----------------------------------------------------------------------------
 authService:
   deploymentname: auth-service-deployment
   servicename: auth-service
-  image: us-central1-docker.pkg.dev/project-d31a3358-346c-40e8-bda/cloudkitchen-registry/auth-service:1.0.0
+  image: us-central1-docker.pkg.dev/project-d31a3358-346c-40e8-bda/cloudkitchen-registry/auth-service:183dedf
   replicas: 1
   port: 8080
-  schema: auth          # PostgreSQL schema this service owns
+  schema: auth # PostgreSQL schema this service owns
   hpa: auth-service-autoscaler
   minReplicas: 1
   maxReplicas: 5
-
 userService:
   deploymentname: user-service-deployment
   servicename: user-service
-  image: us-central1-docker.pkg.dev/project-d31a3358-346c-40e8-bda/cloudkitchen-registry/user-service:1.0.0
+  image: us-central1-docker.pkg.dev/project-d31a3358-346c-40e8-bda/cloudkitchen-registry/user-service:183dedf
   replicas: 1
   port: 8080
   schema: users
   hpa: user-service-autoscaler
   minReplicas: 1
   maxReplicas: 5
-
 restaurantService:
   deploymentname: restaurant-service-deployment
   servicename: restaurant-service
-  image: us-central1-docker.pkg.dev/project-d31a3358-346c-40e8-bda/cloudkitchen-registry/restaurant-service:1.0.0
+  image: us-central1-docker.pkg.dev/project-d31a3358-346c-40e8-bda/cloudkitchen-registry/restaurant-service:183dedf
   replicas: 1
   port: 8080
   schema: restaurants
   hpa: restaurant-service-autoscaler
   minReplicas: 1
   maxReplicas: 5
-
 menuService:
   deploymentname: menu-service-deployment
   servicename: menu-service
-  image: us-central1-docker.pkg.dev/project-d31a3358-346c-40e8-bda/cloudkitchen-registry/menu-service:1.0.0
+  image: us-central1-docker.pkg.dev/project-d31a3358-346c-40e8-bda/cloudkitchen-registry/menu-service:183dedf
   replicas: 1
   port: 8080
   schema: menu
   hpa: menu-service-autoscaler
   minReplicas: 1
   maxReplicas: 5
-
 orderService:
   deploymentname: order-service-deployment
   servicename: order-service
-  image: us-central1-docker.pkg.dev/project-d31a3358-346c-40e8-bda/cloudkitchen-registry/order-service:1.0.0
+  image: us-central1-docker.pkg.dev/project-d31a3358-346c-40e8-bda/cloudkitchen-registry/order-service:183dedf
   replicas: 1
   port: 8080
   schema: orders
   hpa: order-service-autoscaler
   minReplicas: 1
   maxReplicas: 6
-
 paymentService:
   deploymentname: payment-service-deployment
   servicename: payment-service
-  image: us-central1-docker.pkg.dev/project-d31a3358-346c-40e8-bda/cloudkitchen-registry/payment-service:1.0.0
+  image: us-central1-docker.pkg.dev/project-d31a3358-346c-40e8-bda/cloudkitchen-registry/payment-service:183dedf
   replicas: 1
   port: 8080
   schema: payments
   hpa: payment-service-autoscaler
   minReplicas: 1
   maxReplicas: 5
-
 deliveryService:
   deploymentname: delivery-service-deployment
   servicename: delivery-service
-  image: us-central1-docker.pkg.dev/project-d31a3358-346c-40e8-bda/cloudkitchen-registry/delivery-service:1.0.0
+  image: us-central1-docker.pkg.dev/project-d31a3358-346c-40e8-bda/cloudkitchen-registry/delivery-service:183dedf
   replicas: 1
   port: 8080
   schema: delivery
   hpa: delivery-service-autoscaler
   minReplicas: 1
   maxReplicas: 5
-
 notificationService:
   deploymentname: notification-service-deployment
   servicename: notification-service
-  image: us-central1-docker.pkg.dev/project-d31a3358-346c-40e8-bda/cloudkitchen-registry/notification-service:1.0.0
+  image: us-central1-docker.pkg.dev/project-d31a3358-346c-40e8-bda/cloudkitchen-registry/notification-service:183dedf
   replicas: 1
   port: 8080
   schema: notifications
   hpa: notification-service-autoscaler
   minReplicas: 1
   maxReplicas: 5
-
 # -----------------------------------------------------------------------------
 # Frontend (React build served by non-root nginx on :8080)
 # -----------------------------------------------------------------------------
 frontend:
   deploymentname: frontend-deployment
   servicename: frontend-service
-  image: us-central1-docker.pkg.dev/project-d31a3358-346c-40e8-bda/cloudkitchen-registry/frontend:1.0.0
+  image: us-central1-docker.pkg.dev/project-d31a3358-346c-40e8-bda/cloudkitchen-registry/frontend:183dedf
   replicas: 1
   port: 8080
   hpa: frontend-autoscaler
   minReplicas: 1
   maxReplicas: 4
-
 # -----------------------------------------------------------------------------
 # In-cluster data stores (explicit manifests, not subcharts)
 # -----------------------------------------------------------------------------
@@ -126,23 +115,20 @@ postgres:
   image: postgres:16-alpine
   port: 5432
   storage: 10Gi
-  storageClass: standard-rwo        # GKE StorageClass (provided by GCE PD CSI driver)
-
+  storageClass: standard-rwo # GKE StorageClass (provided by GCE PD CSI driver)
 redis:
   name: redis
   servicename: redis
   image: redis:7-alpine
   port: 6379
-
 nats:
   name: nats
   servicename: nats
   image: nats:2.10-alpine
-  clientPort: 4222            # NATS client protocol
-  monitorPort: 8222           # HTTP monitoring endpoint
-  storage: 5Gi                # JetStream file storage
+  clientPort: 4222 # NATS client protocol
+  monitorPort: 8222 # HTTP monitoring endpoint
+  storage: 5Gi # JetStream file storage
   storageClass: standard-rwo
-
 # -----------------------------------------------------------------------------
 # Shared database connection (single DB "cloudkitchen", schema-per-service)
 # -----------------------------------------------------------------------------
@@ -151,7 +137,6 @@ db:
   port: "5432"
   name: cloudkitchen
   sslmode: disable
-
 # -----------------------------------------------------------------------------
 # Ingress (Traefik) + TLS (cert-manager)
 # -----------------------------------------------------------------------------
@@ -165,7 +150,6 @@ ingress:
   entryPoint: web
   tlsSecretName: cloudkitchen-tls
   clusterIssuer: letsencrypt-prod
-
 # -----------------------------------------------------------------------------
 # Secrets (DEV DEFAULTS ONLY — override per-environment / use a secrets manager)
 # -----------------------------------------------------------------------------
