@@ -146,7 +146,12 @@ ingress:
   #   tls: false + entryPoint: web        -> first-day deploy (Phase 4), no cert needed.
   #   tls: true  + entryPoint: websecure  -> HTTPS via cert-manager (Phase 7).
   tls: false
-  domain: 35.224.38.103
+  # Hostnames this IngressRoute will match. Traefik renders the rule as
+  # `Host(<h1>,<h2>,...)` so any one of them matches. Put the production
+  # hostname first; the raw LB IP stays for curl-by-IP debugging.
+  hosts:
+    - vijaygiduthuri.in
+    - 35.224.38.103
   entryPoint: web
   tlsSecretName: cloudkitchen-tls
   clusterIssuer: letsencrypt-prod
