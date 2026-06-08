@@ -64,8 +64,8 @@ previous one.
 | **3** | [GitHub Actions CI](03-github-actions-cicd.md)       | Build & push images to Artifact Registry   | ~15 min  | GitHub secrets, first green CI run (after Trivy CVE iterations), images in AR with `:<short-sha>` + `:latest` tags |
 | **4** | [ArgoCD deploys the app](04-argocd-deploy.md)        | GitOps deployment from this repo           | ~15 min  | ArgoCD installed; UI under `/argocd`; the `cloudkitchen` Application Synced + Healthy; 12 pods Running             |
 | **5** | [DNS + GoDaddy](05-dns-and-godaddy.md)               | Point your domain at the LB IP             | ~15 min  | A record at GoDaddy; chart's IngressRoute updated for multi-host (hostname + IP); app reachable by domain         |
-| **6** | (next) Monitoring + logging                          | Observability stack                        | TBD      | kube-prometheus-stack + Loki/Promtail, ServiceMonitors, Grafana dashboards                                         |
-| **7** | (next) HTTPS via cert-manager + Let's Encrypt        | Real TLS on the LB                         | TBD      | cert-manager, ClusterIssuer, Certificate, Traefik routes serving `https://`                                        |
+| **6** | [Monitoring + logging](06-monitoring-and-logging.md)   | Observability stack                        | ~25 min  | kube-prometheus-stack + Loki/Promtail; ServiceMonitor; 8 per-service Grafana dashboards; PrometheusRule (recording + alerts) |
+| **7** | [HTTPS via cert-manager + Let's Encrypt](07-https-letsencrypt-and-routes.md) | Real TLS on the LB | ~15 min  | cert-manager + ClusterIssuers (staging + prod); Certificate; all 5 UIs (app + argocd + grafana + prometheus + alertmanager) served over HTTPS |
 
 ---
 
