@@ -510,6 +510,103 @@ All five served over **HTTPS with a real browser-trusted certificate**. 🔒
 
 ---
 
+## Step 7 — Redirect HTTP → HTTPS (catch-all)
+
+If you `curl http://vijaygiduthuri.in/` right now you'll see:
+
+```
+404 page not found
+```
+
+That's because Step 4 + Step 5 moved every route to `entryPoints: [websecure]`
+(port 443) — there's nothing listening on `entryPoints: [web]` (port 80)
+anymore. Traefik gets the request, finds no IngressRoute that matches the
+`web` entrypoint, and returns 404.
+
+Standard fix: add a **Middleware + wildcard IngressRoute** that catches
+every HTTP request and 308-redirects it to HTTPS. The repo ships this as
+[monitoring/http-to-https-redirect.yaml](../../monitoring/http-to-https-redirect.yaml).
+
+### The YAML
+
+```yaml
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-to-https
+  namespace: cloudkitchen
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true   # 308 Permanent Redirect (cacheable)
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: http-to-https-redirect
+  namespace: cloudkitchen
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false
+spec:
+  entryPoints:
+    - web                              # ONLY HTTP — HTTPS routes bypass this
+  routes:
+    - match: HostRegexp(`.+`)          # match every host (Traefik 3 syntax)
+      kind: Rule
+      priority: 1                       # lowest priority so any explicit HTTP
+                                        # route (e.g. cert-manager's HTTP-01
+                                        # challenge) takes precedence
+      middlewares:
+        - name: redirect-to-https
+      services:
+        - name: frontend-service        # never actually reached — the
+          port: 80                      # middleware short-circuits with 308
+```
+
+### Apply
+
+```bash
+kubectl apply -f monitoring/http-to-https-redirect.yaml
+```
+
+### Verify
+
+```bash
+# Each path should now return 308 with Location: https://…
+for path in / argocd/ grafana/login prometheus/-/ready alertmanager/-/ready; do
+  printf "%-30s -> " "http://...${path}"
+  curl -sI "http://vijaygiduthuri.in/${path#/}" \
+    | awk '/^HTTP|^[Ll]ocation:/ {printf "%s ", $0}' ; echo
+done
+# Expect for each:  HTTP/1.1 308 Permanent Redirect  Location: https://vijaygiduthuri.in/...
+
+# And follow the redirect — should land on 200 over HTTPS
+for path in / argocd/ grafana/login prometheus/-/ready alertmanager/-/ready; do
+  printf "%-30s -> %s\n" "http://...${path}" \
+    "$(curl -sIL -o /dev/null -w '%{http_code} %{url_effective}' "http://vijaygiduthuri.in/${path#/}")"
+done
+# Expect:  200 https://vijaygiduthuri.in/...  for every path
+```
+
+### Why this works without breaking Let's Encrypt renewal
+
+cert-manager solves the HTTP-01 challenge by creating a **temporary**
+IngressRoute that listens on `web` and matches `/.well-known/acme-challenge/...`.
+That route has a more specific path matcher (and a higher implicit priority
+than our `priority: 1` catch-all), so Traefik picks it over our redirect
+for the challenge traffic only. Everything else still 308s to HTTPS.
+
+> ⚠️ **Why the `traefik` chart's `ports.web.redirectTo` doesn't work for us**
+> The Traefik Helm chart used to support `ports.web.redirectTo.port=websecure`
+> as a one-line redirect, but the schema in chart v40+ rejects that key
+> (`additional properties 'redirectTo' not allowed`). The Middleware +
+> IngressRoute pattern above is the chart-version-independent equivalent
+> and works on every Traefik 3.x deployment.
+
+---
+
 ## 🐛 Troubleshooting
 
 | Symptom | Likely cause | Fix |
