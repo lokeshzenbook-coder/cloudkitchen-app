@@ -146,6 +146,14 @@ EOF
 kubectl apply -f /tmp/argocd-project.yaml
 ```
 
+Verify the AppProject now whitelists `cert-manager`:
+
+```bash
+kubectl -n argocd get appproject cloudkitchen \
+  -o jsonpath='{range .spec.destinations[*]}{.namespace}{"\n"}{end}'
+# Expect 6 lines — cloudkitchen, monitoring, logging, ingress, argocd, cert-manager
+```
+
 #### 1b — Create the cert-manager ArgoCD Application
 
 ```bash
