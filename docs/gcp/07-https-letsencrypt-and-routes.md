@@ -89,76 +89,137 @@ Two equally valid paths. Pick one.
 
 ### Option A — As an ArgoCD Application (matches Phase 6 pattern)
 
-The repo already ships [argocd/apps/app-cert-manager.yaml](../../argocd/apps/app-cert-manager.yaml).
-**Three edits needed before applying** — each fixes a real ArgoCD AppProject
-guardrail that bit us on the first try:
+Two paste-and-go blocks below. Both files in the repo
+([argocd/project.yaml](../../argocd/project.yaml) +
+[argocd/apps/app-cert-manager.yaml](../../argocd/apps/app-cert-manager.yaml))
+are intentionally kept in a generic placeholder state — the YAMLs below are
+the **working Phase 7 versions** with the three AppProject guardrails already
+baked in:
 
-**Edit 1 (in `argocd/apps/app-cert-manager.yaml`):** the file targets the
-`ingress` namespace by default, but Traefik already owns the `traefik`
-namespace and cert-manager conventionally lives in its own `cert-manager`
-namespace. Change the destination:
+| Fix baked into the YAML below | Without it… |
+|---|---|
+| `cert-manager` added to AppProject `destinations:` | ArgoCD rejects sync — *"namespace cert-manager is not permitted in project 'cloudkitchen'"* |
+| App's `destination.namespace: cert-manager` (was `ingress`) | cert-manager would install into the wrong ns; Traefik already owns `traefik` ns |
+| `global.leaderElection.namespace: cert-manager` in Helm values | Chart writes leader-election `Role` / `RoleBinding` into `kube-system` by default → AppProject blocks it |
 
-```yaml
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: cert-manager          # was: ingress
-```
-
-**Edit 2 (same file):** by default the chart creates its leader-election
-`Role` + `RoleBinding` in `kube-system` — but our `cloudkitchen` AppProject's
-`destinations:` list does **not** include `kube-system`, so ArgoCD rejects
-the sync with `namespace kube-system is not permitted in project 'cloudkitchen'`.
-Pin leader-election to the `cert-manager` namespace instead by adding inside
-the `helm.values:` block:
-
-```yaml
-helm:
-  values: |
-    installCRDs: true
-    replicaCount: 2
-    # 👇 ADD THIS — keeps leader-election Roles/RoleBindings out of kube-system
-    global:
-      leaderElection:
-        namespace: cert-manager
-    # rest of values stay as they were
-```
-
-**Edit 3 (in `argocd/project.yaml`):** add `cert-manager` to the AppProject's
-`destinations:` list — otherwise the App will fail with `namespace cert-manager
-is not permitted in project 'cloudkitchen'`:
-
-```yaml
-  destinations:
-    - server: https://kubernetes.default.svc
-      namespace: cloudkitchen
-    # ... existing entries ...
-    - server: https://kubernetes.default.svc
-      namespace: argocd
-    # 👇 ADD THIS
-    - server: https://kubernetes.default.svc
-      namespace: cert-manager
-```
-
-Apply the updated AppProject first, then the App:
+#### 1a — Update the AppProject (adds the `cert-manager` destination)
 
 ```bash
-kubectl apply -f argocd/project.yaml
-kubectl apply -f argocd/apps/app-cert-manager.yaml
+cat > /tmp/argocd-project.yaml <<'EOF'
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: cloudkitchen
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: CloudKitchen platform project (microservices + platform add-ons)
+  sourceRepos:
+    - https://github.com/vijaygiduthuri/cloudkitchen-app.git
+    - https://helm.traefik.io/traefik
+    - https://charts.jetstack.io
+    - https://prometheus-community.github.io/helm-charts
+    - https://grafana.github.io/helm-charts
+  destinations:
+    - {server: https://kubernetes.default.svc, namespace: cloudkitchen}
+    - {server: https://kubernetes.default.svc, namespace: monitoring}
+    - {server: https://kubernetes.default.svc, namespace: logging}
+    - {server: https://kubernetes.default.svc, namespace: ingress}
+    - {server: https://kubernetes.default.svc, namespace: argocd}
+    - {server: https://kubernetes.default.svc, namespace: cert-manager}   # 👈 Phase 7 addition
+  clusterResourceWhitelist:
+    - {group: "",                           kind: Namespace}
+    - {group: apiextensions.k8s.io,         kind: CustomResourceDefinition}
+    - {group: rbac.authorization.k8s.io,    kind: ClusterRole}
+    - {group: rbac.authorization.k8s.io,    kind: ClusterRoleBinding}
+    - {group: admissionregistration.k8s.io, kind: ValidatingWebhookConfiguration}
+    - {group: admissionregistration.k8s.io, kind: MutatingWebhookConfiguration}
+    - {group: storage.k8s.io,               kind: StorageClass}
+    - {group: scheduling.k8s.io,            kind: PriorityClass}
+    - {group: apiregistration.k8s.io,       kind: APIService}
+  namespaceResourceWhitelist:
+    - {group: "*", kind: "*"}
+  sourceNamespaces:
+    - argocd
+EOF
+kubectl apply -f /tmp/argocd-project.yaml
 ```
 
+#### 1b — Create the cert-manager ArgoCD Application
+
+```bash
+cat > /tmp/app-cert-manager.yaml <<'EOF'
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: cloudkitchen
+  source:
+    repoURL: https://charts.jetstack.io
+    chart: cert-manager
+    targetRevision: v1.15.3
+    helm:
+      values: |
+        installCRDs: true
+        replicaCount: 2
+        # 👇 keeps leader-election Roles/RoleBindings out of kube-system
+        #    (kube-system is NOT in the AppProject's destinations list).
+        global:
+          leaderElection:
+            namespace: cert-manager
+        extraArgs:
+          - --dns01-recursive-nameservers-only
+          - --dns01-recursive-nameservers=8.8.8.8:53,1.1.1.1:53
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-manager
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true     # CRDs > 256 KB annotation limit → needs SSA
+EOF
+kubectl apply -f /tmp/app-cert-manager.yaml
+```
+
+#### 1c — Wait for ArgoCD to roll cert-manager out
+
 ArgoCD auto-syncs, creates the `cert-manager` namespace, and installs the
-chart. Wait until all 3 cert-manager Deployments are Ready (~70 s):
+chart. Wait until all cert-manager pods are Ready (~70 s):
 
 ```bash
 kubectl -n argocd get app cert-manager -w
-# Wait until: Synced  Healthy
+# Wait until: Synced  Healthy   (Ctrl-C once it does)
 
 kubectl -n cert-manager get pods
 # Expect 4 pods Running 1/1:
-#   cert-manager-*            (×2 replicas)
+#   cert-manager-*             (×2 replicas)
 #   cert-manager-cainjector-*
 #   cert-manager-webhook-*
 ```
+
+> 💡 **Why the repo files differ from the inline YAMLs**
+> The repo's `argocd/project.yaml` + `argocd/apps/app-cert-manager.yaml`
+> are kept in a generic placeholder state on purpose — so the earlier
+> phases of this doc set stay clean for any learner. The blocks above
+> are the working Phase 7 versions. After Phase 7, you can either leave
+> the repo files as-is (ArgoCD reconciles against the cluster `Application`
+> object, not the file in git, so this is fine) **or** copy the inline
+> YAMLs into the repo + commit + push to keep git == cluster.
 
 ### Option B — Direct `helm install` (simpler one-off, no ArgoCD)
 
@@ -187,27 +248,33 @@ kubectl -n cert-manager get pods
 
 ## Step 2 — Apply the Let's Encrypt ClusterIssuer
 
-One ClusterIssuer, one apply.
+One ClusterIssuer, one apply. Uses Let's Encrypt's production API + the
+HTTP-01 challenge via Traefik.
 
-**File:** [security/cert-manager/clusterissuer.yaml](../../security/cert-manager/clusterissuer.yaml).
-Uses Let's Encrypt's production API + the HTTP-01 challenge via Traefik.
-
-### Set your email (one edit)
-
-Let's Encrypt requires a real email so they can warn you before a cert
-expires. Open the file and change the `email:` field:
-
-```yaml
-spec:
-  acme:
-    server: https://acme-v02.api.letsencrypt.org/directory
-    email: vijaygiduthuri67@gmail.com   # 👈 YOUR real email
-```
+> 📧 Email is hard-coded to `vijaygiduthuri@gmail.com`. Let's Encrypt only
+> uses it to warn you before a cert expires — change in the heredoc below
+> if you want notices going to a different inbox.
 
 ### Apply
 
 ```bash
-kubectl apply -f security/cert-manager/clusterissuer.yaml
+cat > /tmp/clusterissuer.yaml <<'EOF'
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: vijaygiduthuri@gmail.com         # 👈 used for expiry notices
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+      - http01:
+          ingress:
+            class: traefik
+EOF
+kubectl apply -f /tmp/clusterissuer.yaml
 ```
 
 ### Verify
@@ -230,42 +297,35 @@ kubectl describe clusterissuer letsencrypt-prod | tail -10
 
 ## Step 3 — Create the Certificate
 
-One Certificate manifest, one apply, one wait.
+One Certificate manifest, one apply, one wait. The domain is hard-coded
+to `vijaygiduthuri.in`.
 
-**File:** [security/cert-manager/certificate.yaml](../../security/cert-manager/certificate.yaml).
+### Apply
 
-### One edit — your domain
-
-The shipped file uses `cloudkitchen.example.com` as a placeholder.
-Replace it with your domain. The full block should look like:
-
-```yaml
+```bash
+cat > /tmp/certificate.yaml <<'EOF'
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: cloudkitchen-tls
   namespace: cloudkitchen
 spec:
-  secretName: cloudkitchen-tls         # the Secret the chart will read
-  duration: 2160h                       # 90 days (Let's Encrypt default)
-  renewBefore: 360h                     # renew 15 days before expiry
+  secretName: cloudkitchen-tls          # the Secret the chart will read
+  duration: 2160h                        # 90 days (Let's Encrypt default)
+  renewBefore: 360h                      # renew 15 days before expiry
   privateKey:
     algorithm: ECDSA
     size: 256
     rotationPolicy: Always
   issuerRef:
-    name: letsencrypt-prod              # the ClusterIssuer from Step 2
+    name: letsencrypt-prod               # the ClusterIssuer from Step 2
     kind: ClusterIssuer
     group: cert-manager.io
-  commonName: vijaygiduthuri.in         # 👈 YOUR domain
+  commonName: vijaygiduthuri.in
   dnsNames:
-    - vijaygiduthuri.in                 # 👈 YOUR domain
-```
-
-### Apply
-
-```bash
-kubectl apply -f security/cert-manager/certificate.yaml
+    - vijaygiduthuri.in
+EOF
+kubectl apply -f /tmp/certificate.yaml
 ```
 
 ### Wait + verify
@@ -315,21 +375,21 @@ curl -v http://vijaygiduthuri.in/.well-known/acme-challenge/test
 
 ## Step 4 — Flip the chart to HTTPS
 
-Edit [helm/cloudkitchen/values.yaml](../../helm/cloudkitchen/values.yaml) — change exactly two fields in the `ingress:` block:
+Step 4 is the only step that **must** go through git — the cloudkitchen
+app is ArgoCD-managed (`path: helm/cloudkitchen`), so the
+chart-rendered IngressRoute can only be changed by committing to the
+chart values. Two-field flip done with `sed` (no editor needed):
 
-```yaml
-ingress:
-  enabled: true
-  tls: true                       # 👈 was: false
-  host: vijaygiduthuri.in          # (unchanged from Phase 5)
-  lbIP: 136.112.45.103              # (unchanged)
-  entryPoint: websecure            # 👈 was: web
-  tlsSecretName: cloudkitchen-tls   # (unchanged — points at the Secret from Step 3)
-  clusterIssuer: letsencrypt-prod   # (unchanged)
-```
-
-Commit + push:
 ```bash
+sed -i 's/^  tls: false$/  tls: true/'             helm/cloudkitchen/values.yaml
+sed -i 's/^  entryPoint: web$/  entryPoint: websecure/' helm/cloudkitchen/values.yaml
+
+# Sanity-check the two lines you just changed:
+grep -E '^  (tls|entryPoint):' helm/cloudkitchen/values.yaml
+# Expect:
+#   tls: true
+#   entryPoint: websecure
+
 git add helm/cloudkitchen/values.yaml
 git commit -m "phase 7: flip cloudkitchen ingress to HTTPS"
 git push origin main
@@ -411,17 +471,15 @@ kubectl get secret cloudkitchen-tls -n argocd
 > [reflector](https://github.com/emberstack/kubernetes-reflector) and
 > annotate the source Secret — out of scope here.
 
-### 5b — Edit the 3 observability IngressRoutes
+### 5b — Re-apply the 3 observability IngressRoutes (HTTPS version)
 
-Open each file in [monitoring/ingressroutes/](../../monitoring/ingressroutes/)
-and:
+These IngressRoutes are **not** ArgoCD-managed (no app's `path:` points at
+[monitoring/ingressroutes/](../../monitoring/ingressroutes/)) — they're
+applied directly via kubectl. So a `kubectl apply` of the inline YAMLs below
+is the final state; nothing will revert them.
 
-- Change `entryPoints: - web` → `entryPoints: - websecure`
-- Add a `tls:` block at the bottom of `spec:`
-
-The final shape for `monitoring/ingressroutes/grafana.yaml`:
-
-```yaml
+```bash
+cat > /tmp/grafana-ingressroute.yaml <<'EOF'
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -431,22 +489,65 @@ metadata:
     argocd.argoproj.io/sync-options: Prune=false
 spec:
   entryPoints:
-    - websecure                   # 👈 was: web
+    - websecure
   routes:
     - match: Host(`vijaygiduthuri.in`) && PathPrefix(`/grafana`)
       kind: Rule
       services:
         - name: monitoring-grafana
           port: 80
-  tls:                            # 👈 NEW block
+  tls:
     secretName: cloudkitchen-tls
+EOF
+kubectl apply -f /tmp/grafana-ingressroute.yaml
 ```
 
-Apply the same two edits to `prometheus.yaml` and `alertmanager.yaml`,
-then `kubectl apply` all three:
+```bash
+cat > /tmp/prometheus-ingressroute.yaml <<'EOF'
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: prometheus
+  namespace: monitoring
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`vijaygiduthuri.in`) && PathPrefix(`/prometheus`)
+      kind: Rule
+      services:
+        - name: kube-prometheus-prometheus
+          port: 9090
+  tls:
+    secretName: cloudkitchen-tls
+EOF
+kubectl apply -f /tmp/prometheus-ingressroute.yaml
+```
 
 ```bash
-kubectl apply -f monitoring/ingressroutes/
+cat > /tmp/alertmanager-ingressroute.yaml <<'EOF'
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: alertmanager
+  namespace: monitoring
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`vijaygiduthuri.in`) && PathPrefix(`/alertmanager`)
+      kind: Rule
+      services:
+        - name: kube-prometheus-alertmanager
+          port: 9093
+  tls:
+    secretName: cloudkitchen-tls
+EOF
+kubectl apply -f /tmp/alertmanager-ingressroute.yaml
 ```
 
 ### 5c — Update the ArgoCD IngressRoute
@@ -539,9 +640,10 @@ Standard fix: add a **Middleware + wildcard IngressRoute** that catches
 every HTTP request and 308-redirects it to HTTPS. The repo ships this as
 [monitoring/http-to-https-redirect.yaml](../../monitoring/http-to-https-redirect.yaml).
 
-### The YAML
+### Apply
 
-```yaml
+```bash
+cat > /tmp/http-to-https-redirect.yaml <<'EOF'
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
@@ -575,12 +677,8 @@ spec:
       services:
         - name: frontend-service        # never actually reached — the
           port: 80                      # middleware short-circuits with 308
-```
-
-### Apply
-
-```bash
-kubectl apply -f monitoring/http-to-https-redirect.yaml
+EOF
+kubectl apply -f /tmp/http-to-https-redirect.yaml
 ```
 
 ### Verify
@@ -636,43 +734,25 @@ for the challenge traffic only. Everything else still 308s to HTTPS.
 
 ## 📋 Phase 7 cheatsheet
 
+Every step except Step 4 is now a paste-and-go heredoc — see the full
+YAML inline in each step above. Quick summary:
+
+| # | What | Where to copy from |
+|---|---|---|
+| 1a | AppProject + `cert-manager` ns | Step 1a heredoc → `kubectl apply` |
+| 1b | cert-manager Application | Step 1b heredoc → `kubectl apply` |
+| 2  | ClusterIssuer `letsencrypt-prod` | Step 2 heredoc → `kubectl apply` |
+| 3  | Certificate `cloudkitchen-tls` | Step 3 heredoc → wait `READY=True` |
+| 4  | Flip chart values (`tls`/`entryPoint`) | Step 4 `sed` + `git push` (ArgoCD reconciles) |
+| 5a | Copy TLS Secret → `monitoring` + `argocd` | Step 5a one-liner |
+| 5b | Grafana / Prometheus / Alertmanager IngressRoutes | Step 5b — 3 separate heredocs |
+| 5c | ArgoCD IngressRoute | Step 5c heredoc |
+| 6  | Browser-verify all 5 URLs over HTTPS | Step 6 |
+| 7  | HTTP→HTTPS catch-all redirect | Step 7 heredoc |
+
+Final smoke test (HTTPS round-trip on all 5 endpoints):
+
 ```bash
-# 1. cert-manager
-kubectl apply -f argocd/apps/app-cert-manager.yaml          # Option A
-# OR: helm install cert-manager jetstack/cert-manager -n cert-manager \
-#       --create-namespace --set crds.enabled=true --wait
-
-# 2. ClusterIssuer  (one only — letsencrypt-prod)
-#    Edit the email: in security/cert-manager/clusterissuer.yaml -> spec.acme.email
-kubectl apply -f security/cert-manager/clusterissuer.yaml
-kubectl get clusterissuer letsencrypt-prod                  # wait READY=True
-
-# 3. Certificate  (single shot via the prod issuer)
-#    Edit commonName + dnsNames in security/cert-manager/certificate.yaml
-#    to YOUR domain.
-kubectl apply -f security/cert-manager/certificate.yaml
-kubectl -n cloudkitchen get cert cloudkitchen-tls -w        # wait READY=True
-
-# 4. Flip the chart to HTTPS
-sed -i 's/tls: false/tls: true/' helm/cloudkitchen/values.yaml
-sed -i 's/entryPoint: web$/entryPoint: websecure/' helm/cloudkitchen/values.yaml
-git add helm/cloudkitchen/values.yaml
-git commit -m "phase 7: flip cloudkitchen ingress to HTTPS"
-git push origin main
-kubectl -n argocd annotate app cloudkitchen argocd.argoproj.io/refresh=hard --overwrite
-
-# 5. Sub-app routes to HTTPS
-# 5a — copy the TLS Secret across namespaces
-for NS in monitoring argocd; do
-  kubectl get secret cloudkitchen-tls -n cloudkitchen -o yaml \
-    | sed "s/namespace: cloudkitchen/namespace: ${NS}/" \
-    | kubectl apply -f -
-done
-# 5b — edit monitoring/ingressroutes/*.yaml (web → websecure, add tls: block), apply:
-kubectl apply -f monitoring/ingressroutes/
-# 5c — re-apply the ArgoCD IngressRoute with websecure + tls (see Step 5c)
-
-# 6. Verify
 for URL in / /argocd/ /grafana/login /prometheus/-/ready /alertmanager/-/ready; do
   printf "%-30s  -> " "$URL"
   curl -sIL -o /dev/null -w "HTTP %{http_code}\n" "https://vijaygiduthuri.in$URL"
