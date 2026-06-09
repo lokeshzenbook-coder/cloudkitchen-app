@@ -373,45 +373,120 @@ curl -v http://vijaygiduthuri.in/.well-known/acme-challenge/test
 
 ---
 
-## Step 4 — Flip the chart to HTTPS
+## Step 4 — Flip the cloudkitchen IngressRoute to HTTPS
 
-Step 4 is the only step that **must** go through git — the cloudkitchen
-app is ArgoCD-managed (`path: helm/cloudkitchen`), so the
-chart-rendered IngressRoute can only be changed by committing to the
-chart values. Two-field flip done with `sed` (no editor needed):
+The `cloudkitchen` IngressRoute is the only Phase 7 resource that's
+rendered by an ArgoCD-managed chart (`path: helm/cloudkitchen`,
+`syncPolicy.automated.selfHeal: true`). If we just `kubectl apply` an
+HTTPS version, ArgoCD would revert it back to HTTP within ~30 s.
+
+So we do it in two paste-and-go blocks: **(4a)** tell ArgoCD to stop
+auto-healing this one app, then **(4b)** apply the HTTPS-flavor
+IngressRoute directly with kubectl.
+
+> ⚠️ **Trade-off you're making by skipping git**
+> The cloudkitchen App will show **OutOfSync** in the ArgoCD UI from now
+> on (red badge) because git still says `tls: false, entryPoint: web`
+> while the cluster says `websecure + tls`. That's expected — git is no
+> longer the source of truth for this resource. To restore the GitOps
+> flow later, see the "Restore GitOps for cloudkitchen App" callout
+> below this step.
+
+### 4a — Disable ArgoCD auto-sync on the cloudkitchen App
 
 ```bash
-sed -i 's/^  tls: false$/  tls: true/'             helm/cloudkitchen/values.yaml
-sed -i 's/^  entryPoint: web$/  entryPoint: websecure/' helm/cloudkitchen/values.yaml
+kubectl -n argocd patch application cloudkitchen --type=json \
+  -p='[{"op":"remove","path":"/spec/syncPolicy/automated"}]'
 
-# Sanity-check the two lines you just changed:
-grep -E '^  (tls|entryPoint):' helm/cloudkitchen/values.yaml
-# Expect:
-#   tls: true
-#   entryPoint: websecure
-
-git add helm/cloudkitchen/values.yaml
-git commit -m "phase 7: flip cloudkitchen ingress to HTTPS"
-git push origin main
+# Verify automated sync is gone (should print nothing — the field is removed):
+kubectl -n argocd get application cloudkitchen \
+  -o jsonpath='{.spec.syncPolicy.automated}{"\n"}'
 ```
 
-The pipeline rebuilds + pushes images and bumps tags (a `helm/**`
-change triggers the full CI per our consolidated workflow — see Phase 3).
-Then ArgoCD picks up the new values.yaml and reconciles. To skip the
-3-minute poll wait:
+### 4b — Apply the HTTPS-flavor IngressRoute
+
+All 10 chart-rendered routes are preserved exactly as the chart produces
+them — only `entryPoints: [web]` becomes `[websecure]` and a `tls:` block
+is added at the bottom:
 
 ```bash
-kubectl -n argocd annotate app cloudkitchen \
-  argocd.argoproj.io/refresh=hard --overwrite
+cat > /tmp/cloudkitchen-ingressroute.yaml <<'EOF'
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: cloudkitchen
+  namespace: cloudkitchen
+  labels:
+    app: cloudkitchen
+spec:
+  entryPoints:
+    - websecure                                            # 👈 was: web
+  routes:
+    # --- menu sub-paths (higher priority) ---
+    - match: (Host(`vijaygiduthuri.in`) || Host(`136.112.45.103`)) && PathRegexp(`^/api/restaurants/[^/]+/(menu|categories|items)`)
+      kind: Rule
+      priority: 200
+      services:
+        - {name: menu-service, port: 8080}
+    - match: (Host(`vijaygiduthuri.in`) || Host(`136.112.45.103`)) && PathPrefix(`/api/menu`)
+      kind: Rule
+      priority: 200
+      services:
+        - {name: menu-service, port: 8080}
+    # --- one rule per service ---
+    - match: (Host(`vijaygiduthuri.in`) || Host(`136.112.45.103`)) && PathPrefix(`/api/auth`)
+      kind: Rule
+      priority: 100
+      services:
+        - {name: auth-service, port: 8080}
+    - match: (Host(`vijaygiduthuri.in`) || Host(`136.112.45.103`)) && PathPrefix(`/api/users`)
+      kind: Rule
+      priority: 100
+      services:
+        - {name: user-service, port: 8080}
+    - match: (Host(`vijaygiduthuri.in`) || Host(`136.112.45.103`)) && PathPrefix(`/api/restaurants`)
+      kind: Rule
+      priority: 100
+      services:
+        - {name: restaurant-service, port: 8080}
+    - match: (Host(`vijaygiduthuri.in`) || Host(`136.112.45.103`)) && (PathPrefix(`/api/cart`) || PathPrefix(`/api/orders`))
+      kind: Rule
+      priority: 100
+      services:
+        - {name: order-service, port: 8080}
+    - match: (Host(`vijaygiduthuri.in`) || Host(`136.112.45.103`)) && PathPrefix(`/api/payments`)
+      kind: Rule
+      priority: 100
+      services:
+        - {name: payment-service, port: 8080}
+    - match: (Host(`vijaygiduthuri.in`) || Host(`136.112.45.103`)) && PathPrefix(`/api/deliveries`)
+      kind: Rule
+      priority: 100
+      services:
+        - {name: delivery-service, port: 8080}
+    - match: (Host(`vijaygiduthuri.in`) || Host(`136.112.45.103`)) && PathPrefix(`/api/notifications`)
+      kind: Rule
+      priority: 100
+      services:
+        - {name: notification-service, port: 8080}
+    # --- frontend catch-all (lowest priority) ---
+    - match: (Host(`vijaygiduthuri.in`) || Host(`136.112.45.103`)) && PathPrefix(`/`)
+      kind: Rule
+      priority: 1
+      services:
+        - {name: frontend-service, port: 80}
+  tls:                                                     # 👈 NEW block
+    secretName: cloudkitchen-tls
+EOF
+kubectl apply -f /tmp/cloudkitchen-ingressroute.yaml
 ```
 
-Verify the IngressRoute now has TLS:
+### Verify
 
 ```bash
-kubectl -n cloudkitchen get ingressroute cloudkitchen -o yaml \
-  | grep -A 2 "tls:"
-# Should show:  tls:
-#                  secretName: cloudkitchen-tls
+kubectl -n cloudkitchen get ingressroute cloudkitchen \
+  -o jsonpath='{.spec.entryPoints} {.spec.tls.secretName}{"\n"}'
+# Expect:  ["websecure"] cloudkitchen-tls
 ```
 
 ### Smoke test
@@ -422,14 +497,31 @@ curl -sI "https://vijaygiduthuri.in/" | head -1
 
 curl -s "https://vijaygiduthuri.in/api/restaurants" | head -c 200 ; echo
 # Expect: JSON array of restaurants
+
+# All 10 microservice routes still work — try a couple more:
+curl -s -o /dev/null -w "HTTP %{http_code}\n" "https://vijaygiduthuri.in/api/auth/health"
+curl -s -o /dev/null -w "HTTP %{http_code}\n" "https://vijaygiduthuri.in/api/menu"
 ```
 
 🎉 The app is now on **HTTPS with a real browser-trusted certificate**.
 
-> ⚠️ HTTP-to-HTTPS redirect (port 80 → 443) is NOT automatic with the
-> current chart. If you want plain `http://vijaygiduthuri.in/` to bounce
-> to https, add this Traefik redirect Middleware and reference it on the
-> route's `web` entrypoint — out of scope for this phase. Optional.
+> ℹ️ **Restore GitOps for the cloudkitchen App later (optional)**
+> When you're ready to put git back in charge of the chart, do this once:
+>
+> ```bash
+> # 1. Update git so the chart renders HTTPS too:
+> sed -i 's/^  tls: false$/  tls: true/'                  helm/cloudkitchen/values.yaml
+> sed -i 's/^  entryPoint: web$/  entryPoint: websecure/' helm/cloudkitchen/values.yaml
+> git add helm/cloudkitchen/values.yaml
+> git commit -m "phase 7: flip cloudkitchen ingress to HTTPS (post-hoc)"
+> git push origin main
+>
+> # 2. Re-enable ArgoCD auto-sync. Because git now matches the live state,
+> #    selfHeal will NOT revert anything:
+> kubectl -n argocd patch application cloudkitchen --type=merge -p '{
+>   "spec": {"syncPolicy": {"automated": {"prune": true, "selfHeal": true}}}
+> }'
+> ```
 
 ---
 
@@ -743,7 +835,8 @@ YAML inline in each step above. Quick summary:
 | 1b | cert-manager Application | Step 1b heredoc → `kubectl apply` |
 | 2  | ClusterIssuer `letsencrypt-prod` | Step 2 heredoc → `kubectl apply` |
 | 3  | Certificate `cloudkitchen-tls` | Step 3 heredoc → wait `READY=True` |
-| 4  | Flip chart values (`tls`/`entryPoint`) | Step 4 `sed` + `git push` (ArgoCD reconciles) |
+| 4a | Disable ArgoCD auto-sync on `cloudkitchen` App | Step 4a one-liner |
+| 4b | HTTPS-flavor cloudkitchen IngressRoute (10 routes preserved) | Step 4b heredoc → `kubectl apply` |
 | 5a | Copy TLS Secret → `monitoring` + `argocd` | Step 5a one-liner |
 | 5b | Grafana / Prometheus / Alertmanager IngressRoutes | Step 5b — 3 separate heredocs |
 | 5c | ArgoCD IngressRoute | Step 5c heredoc |
