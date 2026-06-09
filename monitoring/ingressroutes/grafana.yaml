@@ -1,6 +1,10 @@
-# Edited in Phase 7 — flipped from HTTP (web) to HTTPS (websecure) with the
-# cloudkitchen-tls Secret duplicated into this namespace (cert-manager only
-# refreshes the original in cloudkitchen ns; re-duplicate after renewal).
+# =============================================================================
+# Traefik IngressRoute exposing grafana at  http://<host>/grafana/
+# Backend: monitoring-grafana:80
+#
+# Apply with:
+#   kubectl apply -f monitoring/ingressroutes/grafana.yaml
+# =============================================================================
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -10,12 +14,10 @@ metadata:
     argocd.argoproj.io/sync-options: Prune=false
 spec:
   entryPoints:
-  - websecure
+    - web
   routes:
-  - match: (Host(`vijaygiduthuri.in`) || Host(`35.224.38.103`)) && PathPrefix(`/grafana`)
-    kind: Rule
-    services:
-    - name: monitoring-grafana
-      port: 80
-  tls:
-    secretName: cloudkitchen-tls
+    - match: Host(`vijaygiduthuri.in`) && PathPrefix(`/grafana`)
+      kind: Rule
+      services:
+        - name: monitoring-grafana
+          port: 80

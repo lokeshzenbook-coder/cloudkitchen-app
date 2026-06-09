@@ -21,7 +21,7 @@ metadata:
 spec:
   acme:
     server: https://acme-v02.api.letsencrypt.org/directory
-    email: vijaygiduthuri67@gmail.com   # 👈 your real email — used for expiry notices
+    email: admin@cloudkitchen.example.com   # 👈 your real email — used for expiry notices
     privateKeySecretRef:
       name: letsencrypt-prod-account-key
     solvers:

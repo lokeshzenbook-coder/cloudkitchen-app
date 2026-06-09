@@ -44,8 +44,6 @@ spec:
       namespace: ingress
     - server: https://kubernetes.default.svc
       namespace: argocd
-    - server: https://kubernetes.default.svc
-      namespace: cert-manager   # added in Phase 7 — for the cert-manager App
 
   # ---------------------------------------------------------------------------
   # Cluster-scoped resources ArgoCD is allowed to create (whitelist).

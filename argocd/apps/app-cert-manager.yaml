@@ -24,13 +24,6 @@ spec:
         # Let the chart install its CRDs so ArgoCD does not need them pre-applied.
         installCRDs: true
         replicaCount: 2
-        # IMPORTANT: by default cert-manager creates its leader-election lease
-        # in kube-system, which our cloudkitchen AppProject does NOT permit.
-        # Pin all the leader-election Roles/RoleBindings to the cert-manager
-        # namespace instead.
-        global:
-          leaderElection:
-            namespace: cert-manager
         # Optional: tell cert-manager which DNS resolvers to use for ACME checks.
         extraArgs:
           - --dns01-recursive-nameservers-only
@@ -47,7 +40,7 @@ spec:
 
   destination:
     server: https://kubernetes.default.svc
-    namespace: cert-manager
+    namespace: ingress
 
   syncPolicy:
     automated:

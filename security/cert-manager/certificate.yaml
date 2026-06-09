@@ -1,5 +1,5 @@
 # =============================================================================
-# TLS certificate for vijaygiduthuri.in.
+# TLS certificate for cloudkitchen.example.com.
 #
 # cert-manager obtains a real Let's Encrypt certificate via the
 # letsencrypt-prod ClusterIssuer (HTTP-01 challenge through Traefik) and
@@ -27,6 +27,6 @@ spec:
     name: letsencrypt-prod   # -> letsencrypt-prod for production
     kind: ClusterIssuer
     group: cert-manager.io
-  commonName: vijaygiduthuri.in
+  commonName: cloudkitchen.example.com
   dnsNames:
-    - vijaygiduthuri.in
+    - cloudkitchen.example.com
