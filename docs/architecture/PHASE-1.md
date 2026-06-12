@@ -67,6 +67,7 @@ cloudkitchen-app/
 ├── frontend/             # React SPA
 ├── helm/                 # Helm chart(s) for the services
 ├── terraform/            # AWS infra (VPC, EKS, ECR, IAM/IRSA) — us-east-1
+├── gcp-terraform/        # GCP infra (VPC, GKE, Artifact Registry, IAM) — us-central1
 ├── argocd/               # ArgoCD Applications / App-of-Apps
 ├── monitoring/           # Prometheus + Grafana (this phase)
 ├── logging/              # Loki + Promtail (this phase)
@@ -147,9 +148,9 @@ flowchart LR
     push[git push to main] --> ci[GitHub Actions]
     ci --> matrix[Matrix build per service]
     matrix --> trivy[Trivy scan HIGH/CRITICAL]
-    trivy -->|pass| ecr[(Push to ECR us-east-1)]
+    trivy -->|pass| reg[("Push to image registry<br/>ECR (AWS) / GAR (GCP)")]
     trivy -->|fail| stop[Fail pipeline]
-    ecr --> bump[Bump helm/cloudkitchen/values.yaml image tags]
+    reg --> bump[Bump helm/cloudkitchen/values.yaml image tags]
     bump --> commit[Commit tag bump back to repo]
 ```
 
@@ -157,7 +158,7 @@ flowchart LR
    Docker image tagged with the commit SHA.
 2. **Trivy gate** — image scanned; `HIGH`/`CRITICAL` (fixable) findings fail the
    job and block the push.
-3. **Push to ECR** — image pushed to the per-service ECR repo in `us-east-1`.
+3. **Push to image registry** — image pushed to the per-service repo. On AWS this is **ECR** (`us-east-1`); on GCP this is **Artifact Registry** (`us-central1`). The CI workflow under `.github/workflows/` is what selects the target.
 4. **Bump values** — CI updates the image tags in `helm/cloudkitchen/values.yaml`
    and **commits** that change back to the repo.
 5. **No `helm upgrade` in CI.** The committed tag change is the deploy trigger.
@@ -168,13 +169,13 @@ flowchart LR
 flowchart LR
     commit[Commit on helm/cloudkitchen/values.yaml] --> argo[ArgoCD detects drift]
     argo --> sync[Auto-sync]
-    sync --> eks[(EKS cluster us-east-1)]
-    eks --> live[Updated workloads in cloudkitchen ns]
+    sync --> k8s[("Kubernetes cluster<br/>EKS (AWS) / GKE (GCP)")]
+    k8s --> live[Updated workloads in cloudkitchen ns]
 ```
 
 1. ArgoCD watches the repo (App-of-Apps in `argocd/`).
 2. The CI tag bump makes the live cluster drift from desired state.
-3. ArgoCD **auto-syncs** the Helm release to EKS.
+3. ArgoCD **auto-syncs** the Helm release to the Kubernetes cluster (EKS or GKE, depending on which terraform tree you applied).
 4. Rollout completes; new pods are scraped by Prometheus and logged by Promtail.
 
 This gives a clean separation: **CI produces artifacts + desired state; ArgoCD
@@ -186,6 +187,6 @@ reconciles the cluster to that state.**
   CPU, memory, pod health, HTTP request rate, and 5xx error rate. (`monitoring/`)
 - **Logs**: Promtail tails the `cloudkitchen` namespace, parses JSON, ships to
   Loki. (`logging/`)
-- **Security**: restricted PSS, non-root containers, IRSA, External Secrets,
+- **Security**: restricted PSS, non-root containers, **workload identity** (IRSA on EKS / Workload Identity on GKE), External Secrets,
   default-deny NetworkPolicies, Let's Encrypt TLS via cert-manager, Trivy
   scanning. (`security/`)

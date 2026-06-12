@@ -364,7 +364,7 @@ cloudkitchen-app/
 ├── logging/                  Loki + Promtail values
 ├── security/                 cert-manager, NetworkPolicies, PSS docs, Trivy notes
 ├── docker/                   docker-compose.yml for full local stack
-├── docs/                     architecture docs + step-by-step EKS deploy runbooks
+├── docs/                     architecture docs + step-by-step deploy runbooks (EKS + GKE)
 └── .github/workflows/        CI pipeline (build, Trivy, push, GitOps bump)
 ```
 
