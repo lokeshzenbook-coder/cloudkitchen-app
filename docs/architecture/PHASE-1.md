@@ -30,7 +30,7 @@ flowchart TB
     subgraph data[Backing services]
       pg[(PostgreSQL)]
       redis[(Redis)]
-      mq{{NATS (JetStream)}}
+      mq{{"NATS (JetStream)"}}
     end
 
     user --> traefik --> fe
