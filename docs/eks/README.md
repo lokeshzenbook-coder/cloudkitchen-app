@@ -121,7 +121,7 @@ Every phase doc has the **same structure**:
 
 | Folder | Purpose | Used by phase |
 |--------|---------|---------------|
-| `terraform/` | AWS infra (VPC/EKS/ECR/IAM/bastion) | 1 |
+| `aws-terraform/` | AWS infra (VPC/EKS/ECR/IAM/bastion) | 1 |
 | `helm/cloudkitchen/` | the umbrella chart | 4, 5, 7 |
 | `.github/workflows/` | CI: build → ECR → bump values.yaml | 3 |
 | `argocd/` | ArgoCD Application + AppProject | 4 |

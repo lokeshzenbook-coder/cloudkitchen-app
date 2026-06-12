@@ -66,7 +66,7 @@ cloudkitchen-app/
 ├── notification/         # Go service: notifications (email/push)
 ├── frontend/             # React SPA
 ├── helm/                 # Helm chart(s) for the services
-├── terraform/            # AWS infra (VPC, EKS, ECR, IAM/IRSA) — us-east-1
+├── aws-terraform/        # AWS infra (VPC, EKS, ECR, IAM/IRSA) — us-east-1
 ├── gcp-terraform/        # GCP infra (VPC, GKE, Artifact Registry, IAM) — us-central1
 ├── argocd/               # ArgoCD Applications / App-of-Apps
 ├── monitoring/           # Prometheus + Grafana (this phase)

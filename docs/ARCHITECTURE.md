@@ -335,7 +335,7 @@ flowchart TB
 | Orchestration | **Kubernetes** (GKE / EKS) |
 | Ingress | **Traefik** (Helm chart) |
 | Packaging | **Helm** (one umbrella chart for everything) |
-| IaC | **Terraform** (`gcp-terraform/` for GCP, `terraform/` for AWS) |
+| IaC | **Terraform** (`gcp-terraform/` for GCP, `aws-terraform/` for AWS) |
 | Image registry | **GCP Artifact Registry** (`cloudkitchen-registry`) / AWS ECR |
 | CI | **GitHub Actions** (matrix build → Trivy scan → push → values bump) |
 | CD / GitOps | **ArgoCD** (no `helm upgrade` in CI; ArgoCD reconciles Git → cluster) |
@@ -357,7 +357,7 @@ cloudkitchen-app/
 │
 ├── frontend/                 React + Vite SPA + nginx (also acts as local /api gateway)
 ├── helm/cloudkitchen/        Single umbrella Helm chart that deploys ALL 12 things
-├── terraform/                AWS EKS infrastructure (VPC / EKS / ECR / IAM)
+├── aws-terraform/            AWS EKS infrastructure (VPC / EKS / ECR / IAM)
 ├── gcp-terraform/            GCP GKE infrastructure (VPC / Artifact Registry / firewall)
 ├── argocd/                   ArgoCD Application + AppProject manifests
 ├── monitoring/               Prometheus values, ServiceMonitors, PrometheusRules, Grafana dashboards
@@ -380,7 +380,7 @@ cloudkitchen-app/
 | **Traefik over nginx-ingress** | Native `IngressRoute` CRD + middleware composition is cleaner than annotation-driven nginx. |
 | **GitOps via ArgoCD** (not `helm upgrade` in CI) | Cluster state == Git. Roll back = revert a commit. No imperative `kubectl` from CI runners. |
 | **Distroless, non-root images** | Smaller (~17 MB Go images, ~63 MB nginx frontend), fewer CVEs (no shell, no package manager). |
-| **Both AWS and GCP terraform** | You can deploy to either cloud — `terraform/` (EKS) or `gcp-terraform/` (GKE). Helm chart is cloud-agnostic. |
+| **Both AWS and GCP terraform** | You can deploy to either cloud — `aws-terraform/` (EKS) or `gcp-terraform/` (GKE). Helm chart is cloud-agnostic. |
 
 ---
 

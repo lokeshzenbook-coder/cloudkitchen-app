@@ -126,7 +126,7 @@ flowchart TB
 | 🩷 Pink   | Data stores               | PostgreSQL, Redis, NATS JetStream |
 | 🔷 Cyan   | Observability + Logging   | Prometheus + Grafana + Alertmanager, Loki + Promtail |
 
-- **Infrastructure (Terraform).** One `terraform apply` provisions the VPC, Kubernetes cluster (GKE or EKS), container registry (Artifact Registry or ECR), and IAM — see `gcp-terraform/` and `terraform/`.
+- **Infrastructure (Terraform).** One `terraform apply` provisions the VPC, Kubernetes cluster (GKE or EKS), container registry (Artifact Registry or ECR), and IAM — see `gcp-terraform/` and `aws-terraform/`.
 - **CI (GitHub Actions).** On every push to `main`: build all 9 Docker images in parallel, Trivy-scan them, push to the registry, and commit the new image tags back to `helm/cloudkitchen/values.yaml`.
 - **CD (ArgoCD + Helm).** ArgoCD watches the repo, renders the umbrella Helm chart with the new tags, and reconciles every platform App via the **App-of-Apps** pattern — the application, the ingress layer, the monitoring stack, and the logging stack.
 - **Ingress + TLS (Traefik + cert-manager).** Traefik serves traffic on `:80` / `:443`. cert-manager auto-renews a Let's Encrypt TLS certificate via the HTTP-01 challenge (renews every ~75 days).
@@ -149,7 +149,7 @@ See [`docs/architecture/PHASE-1.md`](docs/architecture/PHASE-1.md) for the full 
 | Ingress / TLS    | Traefik + cert-manager (Let's Encrypt) |
 | GitOps           | ArgoCD (App-of-Apps pattern) |
 | Packaging        | Helm (umbrella chart under `helm/cloudkitchen/`) |
-| IaC              | Terraform — `terraform/` for AWS (EKS, ECR, IAM/IRSA), `gcp-terraform/` for GCP (GKE, AR, IAM) |
+| IaC              | Terraform — `aws-terraform/` for AWS (EKS, ECR, IAM/IRSA), `gcp-terraform/` for GCP (GKE, AR, IAM) |
 | CI/CD            | GitHub Actions (matrix build, Trivy gate, registry push, values bump) |
 | Metrics          | Prometheus (kube-prometheus-stack) + Grafana |
 | Logging          | Loki + Promtail |
@@ -169,7 +169,7 @@ cloudkitchen-app/
 ├── notification/    # Go service — notifications
 ├── frontend/        # React SPA
 ├── helm/            # Helm chart(s)
-├── terraform/       # AWS infra (VPC, EKS, ECR, IAM/IRSA) — us-east-1
+├── aws-terraform/   # AWS infra (VPC, EKS, ECR, IAM/IRSA) — us-east-1
 ├── gcp-terraform/   # GCP infra (VPC, GKE, Artifact Registry, IAM) — us-central1
 ├── argocd/          # ArgoCD Applications (App-of-Apps)
 ├── monitoring/      # Prometheus + Grafana values & dashboards
@@ -224,7 +224,7 @@ flowchart LR
 ```
 
 1. **Provision** infrastructure with **Terraform**. On AWS that's VPC + EKS +
-   ECR + IAM/IRSA in `us-east-1` (`terraform/`). On GCP that's VPC + GKE +
+   ECR + IAM/IRSA in `us-east-1` (`aws-terraform/`). On GCP that's VPC + GKE +
    Artifact Registry + IAM in `us-central1` (`gcp-terraform/`).
 2. **Bootstrap** the cluster: namespaces, Traefik, cert-manager, ArgoCD,
    kube-prometheus-stack, Loki/Promtail.

@@ -58,7 +58,7 @@ changes is a no-op).
 ## 📂 Folder layout
 
 ```
-terraform/
+aws-terraform/
 ├── README.md            # this file
 ├── provider.tf          # terraform + AWS provider + state backend config
 ├── variables.tf         # variable DECLARATIONS (types, descriptions, defaults)
@@ -115,7 +115,7 @@ terraform -version            # >= 1.5
 
 ## 🚀 Quick start (the 4 commands)
 
-From inside this `terraform/` folder:
+From inside this `aws-terraform/` folder:
 
 ```bash
 # 1. Download providers (aws, tls) + initialize state

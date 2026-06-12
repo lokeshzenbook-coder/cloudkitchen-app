@@ -41,7 +41,7 @@ run `kubectl get nodes`.
 | AWS account + IAM user with `AdministratorAccess` *(easy for learning)* | `aws sts get-caller-identity` | AWS console → IAM → Users |
 | **Terraform ≥ 1.5** | `terraform -version` | https://developer.hashicorp.com/terraform/install |
 | **AWS CLI v2** | `aws --version` → 2.x | https://docs.aws.amazon.com/cli/latest/userguide/install.html |
-| The CloudKitchen repo cloned locally | `ls terraform/main.tf` | `git clone …` |
+| The CloudKitchen repo cloned locally | `ls aws-terraform/main.tf` | `git clone …` |
 
 > 🔑 **Credentials**: run `aws configure` **in your own terminal** (never paste
 > secret keys into a chat). Fill in **Access Key ID**, **Secret Access Key**,

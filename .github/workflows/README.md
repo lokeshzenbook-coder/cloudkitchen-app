@@ -126,7 +126,7 @@ hard-coded as `env` in `ci.yaml`.
 3. Create an access key for that user and store the two values as the GitHub
    Secrets `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
 4. Ensure each `cloudkitchen/<service>` ECR repository exists (create them via
-   the Terraform `ecr` module in `terraform/`).
+   the Terraform `ecr` module in `aws-terraform/`).
 5. Re-enable the `push`/`pull_request` triggers in `ci.yaml` (currently commented
    out). At the same time, disable `ci-gcp.yaml` by replacing its `on:` block
    with `workflow_dispatch: {}` so the two don't fight over `values.yaml`.

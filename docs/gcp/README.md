@@ -84,7 +84,7 @@ Only the **cloud-specific edges** differ:
 
 | Concern                  | EKS                                            | GKE                                                              |
 | ------------------------ | ---------------------------------------------- | ---------------------------------------------------------------- |
-| Terraform directory      | `terraform/`                                   | `gcp-terraform/`                                                 |
+| Terraform directory      | `aws-terraform/`                               | `gcp-terraform/`                                                 |
 | Image registry           | ECR (9 separate repos)                         | Artifact Registry (1 repo, 9 image names)                        |
 | CI auth                  | IAM access key in `secrets.AWS_*`              | SA JSON key in `secrets.GCP_SA_KEY`                              |
 | CI workflow file         | `.github/workflows/ci.yaml` (disabled for now) | `.github/workflows/ci-gcp.yaml` (active)                         |

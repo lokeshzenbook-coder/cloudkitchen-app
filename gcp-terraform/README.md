@@ -8,7 +8,7 @@ Compute Engine **bastion** reachable via IAP. Everything is one
 
 > 🎯 Designed for **freshers / 1–2 years experienced** engineers. One flat
 > root, one `terraform.tfvars` to edit, no per-environment folders.
-> 🪞 Parallel to `../terraform/` (AWS/EKS) — same structure, GCP-flavoured.
+> 🪞 Parallel to `../aws-terraform/` (AWS/EKS) — same structure, GCP-flavoured.
 
 ---
 

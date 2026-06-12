@@ -19,7 +19,7 @@ Same idea, different cloud:
 | Kubeconfig fetch      | `aws eks update-kubeconfig`     | `gcloud container clusters get-credentials`                   |
 | Storage class for PVCs | `gp3` (EBS CSI)                | `standard-rwo` (PD CSI, GKE default)                          |
 | LB for ingress        | NLB                             | GCP TCP LoadBalancer (single static IP)                       |
-| Terraform directory   | `terraform/`                    | **`gcp-terraform/`** (kept separate so both clouds coexist)   |
+| Terraform directory   | `aws-terraform/`                | **`gcp-terraform/`** (kept separate so both clouds coexist)   |
 | Control-plane cost    | $73/mo per cluster              | **First zonal cluster FREE** (GKE free tier — $74/mo credit)  |
 
 ---
