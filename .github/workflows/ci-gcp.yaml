@@ -1,6 +1,6 @@
-# =============================================================================
+# ==============================================================================
 # CloudKitchen CI/CD — GCP variant (Artifact Registry)
-# -----------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Pipeline overview (mirrors ci.yaml; only the cloud provider differs):
 #   build          : matrix over all 9 services -> docker build, Trivy scan
 #                    (fail on HIGH/CRITICAL), push to GCP Artifact Registry
