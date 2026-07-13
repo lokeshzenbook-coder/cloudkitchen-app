@@ -14,8 +14,47 @@ env:
   DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
 
 jobs:
+  security:
+    name: Security Checks
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - auth-service
+          - user-service
+          - restaurant-service
+          - menu-service
+          - order-service
+          - payment-service
+          - delivery-service
+          - notification-service
+          - frontend
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # -------------------------
+      # Gitleaks Secret Scan
+      # -------------------------
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # -------------------------
+      # Dockerfile Lint
+      # -------------------------
+      - name: Lint Dockerfile
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: ./${{ matrix.service }}/Dockerfile
+
   docker-build:
     name: Build & Push (${{ matrix.service }})
+    needs: security
     runs-on: ubuntu-latest
 
     strategy:
@@ -38,7 +77,7 @@ jobs:
 
       - name: Generate Short SHA
         id: vars
-        run: echo "sha=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+        run: echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -49,7 +88,41 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
-      - name: Build & Push Docker Image
+      # Build locally for Trivy scan
+      - name: Build Docker Image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.service }}
+          file: ./${{ matrix.service }}/Dockerfile
+          load: true
+          push: false
+          tags: |
+            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.service }}:${{ steps.vars.outputs.sha }}
+            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.service }}:latest
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+      - name: Scan Docker Image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.service }}:${{ steps.vars.outputs.sha }}
+          scan-type: image
+          format: sarif
+          output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Upload Trivy SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+
+      # -------------------------
+      # Push Image
+      # -------------------------
+      - name: Push Docker Image
         uses: docker/build-push-action@v6
         with:
           context: ./${{ matrix.service }}
@@ -59,4 +132,3 @@ jobs:
             ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.service }}:${{ steps.vars.outputs.sha }}
             ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.service }}:latest
           cache-from: type=gha,scope=${{ matrix.service }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
