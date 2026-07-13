@@ -15,8 +15,11 @@ env:
 
 jobs:
   security:
-    name: Security Checks
+    name: Security (${{ matrix.service }})
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
 
     strategy:
       fail-fast: false
@@ -57,6 +60,10 @@ jobs:
     needs: security
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+      security-events: write
+
     strategy:
       fail-fast: false
       matrix:
@@ -88,7 +95,9 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
-      # Build locally for Trivy scan
+      # -------------------------
+      # Build Image (Local)
+      # -------------------------
       - name: Build Docker Image
         uses: docker/build-push-action@v6
         with:
@@ -102,6 +111,20 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
+      # -------------------------
+      # Cache Trivy Database
+      # -------------------------
+      - name: Cache Trivy DB
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/trivy
+          key: trivy-db-${{ runner.os }}
+          restore-keys: |
+            trivy-db-
+
+      # -------------------------
+      # Trivy Scan
+      # -------------------------
       - name: Scan Docker Image
         uses: aquasecurity/trivy-action@v0.36.0
         with:
@@ -112,15 +135,19 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: "1"
+          skip-version-check: true
 
+      # -------------------------
+      # Upload SARIF Report
+      # -------------------------
       - name: Upload Trivy SARIF
-        uses: github/codeql-action/upload-sarif@v3
         if: always()
+        uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-results.sarif
 
       # -------------------------
-      # Push Image
+      # Push Docker Image
       # -------------------------
       - name: Push Docker Image
         uses: docker/build-push-action@v6
